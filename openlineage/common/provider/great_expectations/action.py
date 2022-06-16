@@ -4,7 +4,7 @@ import logging
 import os
 from collections import defaultdict
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union, Dict
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -36,8 +36,18 @@ from openlineage.common.provider.great_expectations.results import \
     COLUMN_EXPECTATIONS_PARSER, \
     GreatExpectationsAssertion
 from openlineage.common.sql import parse
-from sqlalchemy import MetaData, Table
-from sqlalchemy.engine import Connection
+
+# There is no guarantee that SqlAlchemy is available with Great Expectations.
+# Especially, it could be used only with Pandas datasets, in which case
+# we shouldn't try to import it.
+# Great Expectations itself tries hard to not import SqlAlchemy if not needed.
+try:
+    from sqlalchemy import MetaData, Table
+    from sqlalchemy.engine import Connection
+except ImportError:
+    MetaData = None
+    Table = None
+    Connection = None
 
 
 class OpenLineageValidationAction(ValidationAction):
@@ -103,7 +113,7 @@ class OpenLineageValidationAction(ValidationAction):
     def _run(self,
              validation_result_suite: ExpectationSuiteValidationResult,
              validation_result_suite_identifier: ValidationResultIdentifier,
-             data_asset: [GEDataset, Validator],
+             data_asset: Union[GEDataset, Validator],
              expectation_suite_identifier=None,
              checkpoint_identifier=None,
              payload=None):
@@ -188,8 +198,9 @@ class OpenLineageValidationAction(ValidationAction):
                     input_facets=self.results_facet(validation_result_suite)
                 ).to_openlineage_dataset()
             ]
+        return []
 
-    def _fetch_datasets_from_sql_source(self, data_asset: [SqlAlchemyDataset, Validator],
+    def _fetch_datasets_from_sql_source(self, data_asset: Union[SqlAlchemyDataset, Validator],
                                         validation_result_suite: ExpectationSuiteValidationResult) -> List[OLDataset]:  # noqa
         """
         Generate a list of OpenLineage Datasets from a SqlAlchemyDataset.
@@ -230,7 +241,7 @@ class OpenLineageValidationAction(ValidationAction):
 
     def _get_sql_table(
         self,
-        data_asset: [SqlAlchemyDataset, SqlAlchemyBatchData],
+        data_asset: Union[SqlAlchemyDataset, SqlAlchemyBatchData],
         meta: MetaData,
         schema: Optional[str],
         table_name: str,
@@ -324,7 +335,7 @@ class OpenLineageValidationAction(ValidationAction):
         :param validation_result:
         :return:
         """
-        facet_data = {
+        facet_data: Dict[str, defaultdict] = {
             "columnMetrics": defaultdict(dict)
         }
 
